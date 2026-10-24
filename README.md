@@ -6,15 +6,24 @@ Ulanzi Studio only runs on Windows and macOS. On Linux, the AU05's USB dongle al
 
 ## What it does
 
+Each app gets its own set of dial profiles, and the set follows whichever app is in front, the way Ulanzi Studio links profiles to apps.
+
+| App | Dial profiles (the mode button steps through them) |
+|---|---|
+| Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick) → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
+| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window |
+| Anything else | **scroll** the focused window |
+
 | AU05 input | Action |
 |---|---|
-| Backspace key | Toggle the dial between **scroll** and **panes** mode, with a desktop notification |
-| Dial, scroll mode | Scroll the **focused** pane, wherever the pointer is (sends Alt+Shift+Up/Down, 3 lines per tick) |
-| Dial, panes mode | Next or previous terminal pane, one per tick (Terminator's Ctrl+Tab / Ctrl+Shift+Tab by default) |
+| Mode button (reported as Backspace) | Next profile in the focused app's set, with a desktop notification |
+| Enter + Escape together | App switcher (GNOME's Super+Tab): the dial moves between apps; the mode button opens the highlighted app's windows, where the dial moves between them, and closes them again; Enter goes there, Escape (or the pair again) cancels. The picked app's profiles take over. A switcher left open 20 s cancels itself |
 | Voice key | Holds Ctrl+Space for a dictation app such as Handy |
-| Enter / Escape | Enter / Escape |
+| Enter / Escape alone | Enter / Escape, sent after a 0.1 s wait to check whether its partner follows |
 
-Every key, the pane shortcuts, dial sensitivity and direction are set in the constants at the top of `vibekey.py`. Zellij users can swap in Alt+PageDown / Alt+PageUp.
+Profiles and app sets are set in `PROFILES` and `APP_PROFILES` at the top of `vibekey.py`. Apps are matched by window class: run `xprop WM_CLASS` and click a window to see one. Focus is tracked through `xprop`, so this needs an X11 session.
+
+Apps without a keyboard scroll command get **window scrolling**: while the dial turns, the pointer moves to the centre of the focused window, and it goes back 0.6 s after the dial stops (unless you moved the mouse in the meantime). In a split layout it scrolls whatever is at the window's centre. Use the `pointer-scroll` profile to scroll under the pointer instead.
 
 ## Before you start: set up the keypad once on Windows or macOS
 
@@ -27,7 +36,7 @@ Plug the dongle directly into a USB port. Through an adapter, it kept dropping o
 ```sh
 git clone https://github.com/henrycondon/vibekey-linux ~/Desktop/repos/vibekey-linux
 cd ~/Desktop/repos/vibekey-linux
-uv venv .venv && uv pip install --python .venv/bin/python evdev   # or: python3 -m venv .venv && .venv/bin/pip install evdev
+uv venv .venv && uv pip install --python .venv/bin/python -r requirements.txt   # or: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 # Let the logged-in user read the AU05 and create virtual input devices
 sudo cp 70-vibekey.rules /etc/udev/rules.d/
@@ -47,7 +56,7 @@ systemctl --user enable --now vibekey
 
 Terminator has keyboard scroll actions but leaves them unbound. In **Preferences → Keybindings**, set `line_up` to Alt+Shift+Up and `line_down` to Alt+Shift+Down. With scroll mode on, you can turn the dial one notch to enter each one. Raising **Profiles → Scrolling → Scrollback** above the default 500 lines also helps.
 
-To scroll whatever is under the pointer instead, set `SCROLL_UP = None` in `vibekey.py`.
+To scroll whatever is under the pointer instead, use the `wheel` profile in Terminator's set.
 
 `vibekey.service` expects the repo at `~/Desktop/repos/vibekey-linux`. If you clone it somewhere else, edit `ExecStart`.
 

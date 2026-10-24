@@ -1,1 +1,2 @@
 evdev>=1.6
+python-xlib>=0.33
