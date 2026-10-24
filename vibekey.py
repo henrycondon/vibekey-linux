@@ -54,6 +54,9 @@ PROFILES = {
     # Obsidian (and most apps with tabs): Ctrl+Tab / Ctrl+Shift+Tab.
     "tabs": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
     "scroll": {"wheel": "window"},
+    # Obsidian: one turn forward makes one new note; one turn back opens the command
+    # palette, and further turning moves through it until Enter or Escape.
+    "notes": {"once": {"down": [CTRL, e.KEY_N], "up": [CTRL, e.KEY_P]}, "menu": "up"},
     "pointer-scroll": {"name": "scroll under pointer", "wheel": "pointer"},
 }
 
@@ -62,12 +65,14 @@ PROFILES = {
 # window to see an app's. Apps not listed get DEFAULT_PROFILES.
 APP_PROFILES = {
     "terminator": ["panes", "terminal-scroll", "choose"],
-    "obsidian": ["tabs", "scroll"],
+    "obsidian": ["tabs", "scroll", "notes"],
 }
 DEFAULT_PROFILES = ["scroll"]
 
 # "window" scrolling: put the pointer back this many seconds after the dial rests.
 POINTER_RETURN_S = 0.6
+# "once" profiles: ticks closer together than this belong to the same turn.
+TURN_REST_S = 0.6
 
 # Flip if turning the dial "forward" goes the wrong way.
 INVERT_DIAL = False
@@ -166,6 +171,8 @@ class Remapper:
         self.voice_down = False
         self.pointer = Pointer()
         self.pointer_timer = None
+        self.last_tick = 0.0       # for "once" profiles: when the dial last moved
+        self.menu_open = False     # a "once" profile opened a menu the dial now moves through
         self.kbd = UInput({e.EV_KEY: list(range(1, 249))}, name="vibekey keyboard")
         # libinput only treats a device as a pointer if it can move and click.
         self.wheel = UInput({
@@ -198,12 +205,14 @@ class Remapper:
         if (app == self.app and not self.refocus) or self.switching:
             return
         self.app, self.profiles, self.index, self.refocus = app, profiles, 0, False
+        self.menu_open = False
         print(f"focus: {wm_class} -> {self.label()}", flush=True)
         if app:
             notify(self.label())
 
     def next_profile(self):
         self.index = (self.index + 1) % len(self.profiles)
+        self.menu_open = False
         print(f"profile: {self.label()}", flush=True)
         notify(self.label())
 
@@ -295,6 +304,7 @@ class Remapper:
             if self.switching:
                 self.end_switch(go=code == e.KEY_ENTER)
             else:
+                self.menu_open = False  # Enter runs the highlighted item, Escape closes
                 self.tap([code])
         self.pending = (code, asyncio.get_running_loop().call_later(CHORD_S, lone))
 
@@ -321,6 +331,17 @@ class Remapper:
             return
         if "wheel" in spec:
             self.scroll(code, value, spec["wheel"])
+            return
+        if "once" in spec:
+            now = asyncio.get_running_loop().time()
+            new_turn, self.last_tick = now - self.last_tick > TURN_REST_S, now
+            if self.menu_open:
+                for _ in range(abs(value)):
+                    self.tap([e.KEY_UP] if up else [e.KEY_DOWN])
+            elif new_turn:
+                way = "up" if up else "down"
+                self.tap(spec["once"][way])
+                self.menu_open = spec.get("menu") == way
             return
         for _ in range(abs(value) * spec.get("times", 1)):
             self.tap(spec["up"] if up else spec["down"])

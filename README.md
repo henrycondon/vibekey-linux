@@ -11,7 +11,7 @@ Each app gets its own set of dial profiles, and the set follows whichever app is
 | App | Dial profiles (the mode button steps through them) |
 |---|---|
 | Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick) → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
-| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window |
+| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window → **notes**: a turn forward makes one new note (Ctrl+N); a turn back opens the command palette (Ctrl+P), and further turning moves through it until Enter or Escape |
 | Anything else | **scroll** the focused window |
 
 | AU05 input | Action |
