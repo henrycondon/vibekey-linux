@@ -9,8 +9,8 @@ Ulanzi Studio only runs on Windows and macOS. On Linux, the AU05's USB dongle al
 | AU05 input | Action |
 |---|---|
 | Backspace key | Toggle the dial between **scroll** and **panes** mode, with a desktop notification |
-| Dial, scroll mode | Scroll, as normal |
-| Dial, panes mode | Next or previous terminal pane (Terminator's Ctrl+Tab / Ctrl+Shift+Tab by default) |
+| Dial, scroll mode | Scroll the **focused** pane, wherever the pointer is (sends Alt+Shift+Up/Down, 3 lines per tick) |
+| Dial, panes mode | Next or previous terminal pane, one per tick (Terminator's Ctrl+Tab / Ctrl+Shift+Tab by default) |
 | Voice key | Holds Ctrl+Space for a dictation app such as Handy |
 | Enter / Escape | Enter / Escape |
 
@@ -42,6 +42,12 @@ ln -s "$PWD/vibekey.service" ~/.config/systemd/user/vibekey.service
 systemctl --user daemon-reload
 systemctl --user enable --now vibekey
 ```
+
+### Terminator setup
+
+Terminator has keyboard scroll actions but leaves them unbound. In **Preferences → Keybindings**, set `line_up` to Alt+Shift+Up and `line_down` to Alt+Shift+Down. With scroll mode on, you can turn the dial one notch to enter each one. Raising **Profiles → Scrolling → Scrollback** above the default 500 lines also helps.
+
+To scroll whatever is under the pointer instead, set `SCROLL_UP = None` in `vibekey.py`.
 
 `vibekey.service` expects the repo at `~/Desktop/repos/vibekey-linux`. If you clone it somewhere else, edit `ExecStart`.
 

@@ -31,8 +31,16 @@ VOICE_KEYS = [e.KEY_LEFTCTRL, e.KEY_SPACE]
 NEXT_PANE = [e.KEY_LEFTCTRL, e.KEY_TAB]
 PREV_PANE = [e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_TAB]
 
+# Scroll mode sends these keys so the focused pane scrolls, not the one under the pointer.
+# Bind them in Terminator: Preferences > Keybindings > line_up / line_down.
+# Set to None to send plain wheel scroll instead.
+SCROLL_UP = [e.KEY_LEFTALT, e.KEY_LEFTSHIFT, e.KEY_UP]
+SCROLL_DOWN = [e.KEY_LEFTALT, e.KEY_LEFTSHIFT, e.KEY_DOWN]
+# Lines scrolled per dial tick.
+LINES_PER_TICK = 3
+
 # The dial sends many wheel ticks per turn; step one pane per this many ticks.
-TICKS_PER_PANE = 3
+TICKS_PER_PANE = 1
 # Forget a partial step after this many seconds without dial movement.
 TICK_RESET_S = 0.4
 # Flip if turning the dial "forward" goes to the previous pane.
@@ -116,8 +124,13 @@ class Remapper:
 
     def on_wheel(self, code, value):
         if self.mode == "scroll":
-            self.wheel.write(e.EV_REL, code, value)
-            self.wheel.syn()
+            if SCROLL_UP is None:
+                self.wheel.write(e.EV_REL, code, value)
+                self.wheel.syn()
+            elif code == e.REL_WHEEL:
+                keys = SCROLL_UP if value > 0 else SCROLL_DOWN
+                for _ in range(abs(value) * LINES_PER_TICK):
+                    self.tap(keys)
             return
         if code != e.REL_WHEEL:
             return
