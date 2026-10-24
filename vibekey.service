@@ -1,0 +1,12 @@
+[Unit]
+Description=Custom controls for the Ulanzi AU05 Vibe Key
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=%h/Desktop/repos/vibekey-linux/.venv/bin/python %h/Desktop/repos/vibekey-linux/vibekey.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

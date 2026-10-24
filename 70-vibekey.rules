@@ -1,0 +1,4 @@
+# Ulanzi AU05 Vibe Key: let the logged-in desktop user read it and create the
+# virtual keyboard/wheel vibekey.py sends through. Must sort before 73-seat-late.rules.
+SUBSYSTEM=="input", ATTRS{idVendor}=="fff1", ATTRS{idProduct}=="00dd", TAG+="uaccess"
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"
