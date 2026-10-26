@@ -45,24 +45,30 @@ VOICE_KEYS = [e.KEY_LEFTCTRL, e.KEY_LEFTALT, e.KEY_LEFTSHIFT, e.KEY_SPACE]
 
 CTRL, SHIFT, ALT = e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_LEFTALT
 
+# Terminator's scroll profile: how many points bigger the zoomed pane's text gets (one per
+# Ctrl+plus; the default font is 13 pt).
+ZOOM_STEPS = 6
+
 # Dial profiles: what one tick up and one tick down send, shown by "name" (default: the
 # key). "times" repeats each tick. A "wheel" profile scrolls instead: "pointer" scrolls
 # whatever is under the pointer; "window" first moves the pointer onto the focused
 # window's centre, and puts it back once the dial rests. "keys" gives Enter or Escape
 # another job in that profile: "click" is a left click under the pointer; "delete" erases
 # the last Handy dictation on a tap (a single Backspace once that's done) and holds
-# Backspace while held. "enter" and "leave" are keys sent when the mode button steps into
-# or out of the profile.
+# Backspace while held. "enter" and "leave" are lists of key chords sent when the mode
+# button steps into or out of the profile.
 PROFILES = {
     # Terminator: Ctrl+Tab / Ctrl+Shift+Tab step panes.
     "panes": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
     # Terminator: bind line_up / line_down to these in Preferences > Keybindings, so the
     # focused pane scrolls rather than the one under the pointer.
-    # Entering it, Ctrl+Shift+Z (Terminator's scaled_zoom) fills the window with the focused
-    # pane and enlarges its text, for reading from across the room; leaving undoes that.
+    # Entering it fills the window with the focused pane (Ctrl+Shift+X, toggle_zoom) and
+    # makes its text ZOOM_STEPS points bigger (Ctrl+plus), for reading from across the room;
+    # leaving restores the text size (Ctrl+0) and the layout.
     "terminal-scroll": {"name": "scroll", "up": [ALT, SHIFT, e.KEY_UP],
                         "down": [ALT, SHIFT, e.KEY_DOWN], "times": 3,
-                        "enter": [CTRL, SHIFT, e.KEY_Z], "leave": [CTRL, SHIFT, e.KEY_Z]},
+                        "enter": [[CTRL, SHIFT, e.KEY_X]] + [[CTRL, SHIFT, e.KEY_EQUAL]] * ZOOM_STEPS,
+                        "leave": [[CTRL, e.KEY_0], [CTRL, SHIFT, e.KEY_X]]},
     # Claude Code's multiple-choice questions.
     "choose": {"up": [e.KEY_UP], "down": [e.KEY_DOWN]},
     # Obsidian (and most apps with tabs): Ctrl+Tab / Ctrl+Shift+Tab.
@@ -109,6 +115,7 @@ APP_SWITCH_MOD = e.KEY_LEFTMETA
 APP_SWITCH_TIMEOUT_S = 20
 
 MODE_KEY = e.KEY_BACKSPACE
+
 
 # "delete": an Escape held this long holds Backspace instead of erasing the dictation.
 HOLD_S = 0.4
@@ -251,6 +258,10 @@ class Remapper:
         self.chord(keys, 1)
         self.chord(keys, 0)
 
+    def taps(self, chords):
+        for keys in chords:
+            self.tap(keys)
+
     # --- profiles
 
     def focus_changed(self, wm_class):
@@ -262,7 +273,7 @@ class Remapper:
         if self.entered and self.entered[0] == app:
             # Back in an app left mid-profile (a zoomed pane, say): undo it, as the first
             # profile is active again.
-            self.tap(PROFILES[self.entered[1]]["leave"])
+            self.taps(PROFILES[self.entered[1]]["leave"])
             self.entered = None
         print(f"focus: {wm_class} -> {self.label()}", flush=True)
         if app:
@@ -270,12 +281,12 @@ class Remapper:
 
     def next_profile(self):
         if "leave" in PROFILES[self.profile]:
-            self.tap(PROFILES[self.profile]["leave"])
+            self.taps(PROFILES[self.profile]["leave"])
             self.entered = None
         self.index = (self.index + 1) % len(self.profiles)
         self.menu_open = False
         if "enter" in PROFILES[self.profile]:
-            self.tap(PROFILES[self.profile]["enter"])
+            self.taps(PROFILES[self.profile]["enter"])
             if "leave" in PROFILES[self.profile]:
                 self.entered = (self.app, self.profile)
         print(f"profile: {self.label()}", flush=True)
