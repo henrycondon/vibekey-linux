@@ -11,7 +11,8 @@ Each app gets its own set of dial profiles, and the set follows whichever app is
 | App | Dial profiles (the mode button steps through them) |
 |---|---|
 | Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick) → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
-| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window → **notes**: a turn forward makes one new note (Ctrl+N); a turn back opens the command palette (Ctrl+P), and further turning moves through it until Enter or Escape |
+| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window → **notes**: a turn forward makes one new note (Ctrl+N); a turn back opens the command palette (Ctrl+P), and further turning moves through it until Enter or Escape → **tab through** (as in Firefox; Tab indents inside a note) |
+| Firefox | **tabs** (Ctrl+PageUp / Ctrl+PageDown) → **scroll** the focused window → **tab through** (Tab / Shift+Tab, to reach links, buttons and text boxes; Enter left-clicks under the pointer and Escape deletes, see below) |
 | Anything else | **scroll** the focused window |
 
 | AU05 input | Action |
@@ -19,6 +20,7 @@ Each app gets its own set of dial profiles, and the set follows whichever app is
 | Mode button (reported as Backspace) | Next profile in the focused app's set, with a desktop notification |
 | Enter + Escape together | App switcher (GNOME's Super+Tab): the dial moves between apps; the mode button opens the highlighted app's windows, where the dial moves between them, and closes them again; Enter goes there, Escape (or the pair again) cancels. The picked app's profiles take over. A switcher left open 20 s cancels itself |
 | Voice key | Holds Ctrl+Space for a dictation app such as Handy |
+| Escape in **tab through** | A tap erases your last Handy dictation in one go (if it's under 5 minutes old and not erased yet), and after that deletes one character. Holding it holds Backspace |
 | Enter / Escape alone | Enter / Escape, sent after a 0.1 s wait to check whether its partner follows |
 
 Profiles and app sets are set in `PROFILES` and `APP_PROFILES` at the top of `vibekey.py`. Apps are matched by window class: run `xprop WM_CLASS` and click a window to see one. Focus is tracked through `xprop`, so this needs an X11 session.

@@ -6,7 +6,7 @@ through a virtual keyboard and wheel.
 
 Each app gets its own set of dial profiles (APP_PROFILES), and the set follows whichever
 app is focused. In Terminator the dial steps panes, scrolls, or picks answers; in Obsidian
-it steps tabs or scrolls.
+and Firefox it steps tabs, scrolls, or tabs through the page.
 
   mode button (the key the AU05 reports as Backspace)
                          next profile in the focused app's set
@@ -21,9 +21,13 @@ Run with --debug to print every raw event, which is how to find out what a new k
 
 import argparse
 import asyncio
+import json
 import re
+import sqlite3
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 import evdev
 from evdev import UInput, ecodes as e
@@ -41,7 +45,10 @@ CTRL, SHIFT, ALT = e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_LEFTALT
 # Dial profiles: what one tick up and one tick down send, shown by "name" (default: the
 # key). "times" repeats each tick. A "wheel" profile scrolls instead: "pointer" scrolls
 # whatever is under the pointer; "window" first moves the pointer onto the focused
-# window's centre, and puts it back once the dial rests.
+# window's centre, and puts it back once the dial rests. "keys" gives Enter or Escape
+# another job in that profile: "click" is a left click under the pointer; "delete" erases
+# the last Handy dictation on a tap (a single Backspace once that's done) and holds
+# Backspace while held.
 PROFILES = {
     # Terminator: Ctrl+Tab / Ctrl+Shift+Tab step panes.
     "panes": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
@@ -58,6 +65,12 @@ PROFILES = {
     # palette, and further turning moves through it until Enter or Escape.
     "notes": {"once": {"down": [CTRL, e.KEY_N], "up": [CTRL, e.KEY_P]}, "menu": "up"},
     "pointer-scroll": {"name": "scroll under pointer", "wheel": "pointer"},
+    # Firefox: Ctrl+PageUp / Ctrl+PageDown follow the tab strip's order (Ctrl+Tab can be
+    # set to jump in recently-used order instead).
+    "browser-tabs": {"name": "tabs", "up": [CTRL, e.KEY_PAGEUP], "down": [CTRL, e.KEY_PAGEDOWN]},
+    # Web pages and Obsidian: Tab / Shift+Tab step through links, buttons and text boxes.
+    "fields": {"name": "tab through", "up": [SHIFT, e.KEY_TAB], "down": [e.KEY_TAB],
+               "keys": {e.KEY_ENTER: "click", e.KEY_ESC: "delete"}},
 }
 
 # App -> its profiles, first one active when the app gets focus. The key is matched
@@ -65,7 +78,8 @@ PROFILES = {
 # window to see an app's. Apps not listed get DEFAULT_PROFILES.
 APP_PROFILES = {
     "terminator": ["panes", "terminal-scroll", "choose"],
-    "obsidian": ["tabs", "scroll", "notes"],
+    "obsidian": ["tabs", "scroll", "notes", "fields"],
+    "firefox": ["browser-tabs", "scroll", "fields"],
 }
 DEFAULT_PROFILES = ["scroll"]
 
@@ -89,11 +103,39 @@ APP_SWITCH_TIMEOUT_S = 20
 
 MODE_KEY = e.KEY_BACKSPACE
 
+# "delete": an Escape held this long holds Backspace instead of erasing the dictation.
+HOLD_S = 0.4
+# Handy's dictation history. Only a dictation this recent is erased in one go.
+HANDY_DIR = Path.home() / ".local/share/com.pais.handy"
+HANDY_ERASE_WITHIN_S = 300
+
 # ------------------------------------------------------------------------------------
 
 MODIFIERS = {e.KEY_LEFTCTRL, e.KEY_RIGHTCTRL, e.KEY_LEFTALT, e.KEY_RIGHTALT,
              e.KEY_LEFTSHIFT, e.KEY_RIGHTSHIFT, e.KEY_LEFTMETA, e.KEY_RIGHTMETA}
 CHORD_KEYS = (e.KEY_ENTER, e.KEY_ESC)
+
+
+def last_dictation():
+    """(id, text Handy typed) for Handy's newest recent dictation, or None."""
+    try:
+        db = sqlite3.connect(f"file:{HANDY_DIR / 'history.db'}?mode=ro", uri=True)
+        with db:
+            row = db.execute(
+                "SELECT id, timestamp, transcription_text, post_processed_text"
+                " FROM transcription_history ORDER BY id DESC LIMIT 1").fetchone()
+        db.close()
+        settings = json.loads((HANDY_DIR / "settings_store.json").read_text())
+        settings = settings.get("settings", settings)
+    except (sqlite3.Error, OSError, ValueError) as err:
+        print(f"handy history: {err}", flush=True)
+        return None
+    if not row or time.time() - row[1] > HANDY_ERASE_WITHIN_S:
+        return None
+    text = row[3] or row[2]
+    if settings.get("append_trailing_space"):
+        text += " "
+    return row[0], text
 
 
 def notify(text):
@@ -173,6 +215,9 @@ class Remapper:
         self.pointer_timer = None
         self.last_tick = 0.0       # for "once" profiles: when the dial last moved
         self.menu_open = False     # a "once" profile opened a menu the dial now moves through
+        self.down = set()          # chord keys physically down
+        self.delete_key = None     # the Escape doing a "delete": (key, hold timer or None once held)
+        self.erased = None         # id of the Handy dictation already erased
         self.kbd = UInput({e.EV_KEY: list(range(1, 249))}, name="vibekey keyboard")
         # libinput only treats a device as a pointer if it can move and click.
         self.wheel = UInput({
@@ -288,8 +333,13 @@ class Remapper:
 
     def on_chord_key(self, code, value):
         if value == 0:
+            self.down.discard(code)
             self.chorded.discard(code)
+            if self.delete_key and self.delete_key[0] == code:
+                self.end_delete()
             return
+        if value == 1:
+            self.down.add(code)
         if value != 1 or code in self.chorded:
             return
         if self.pending and self.pending[0] != code:
@@ -301,12 +351,53 @@ class Remapper:
 
         def lone():
             self.pending = None
+            action = PROFILES[self.profile].get("keys", {}).get(code)
             if self.switching:
                 self.end_switch(go=code == e.KEY_ENTER)
+            elif action == "click":
+                self.click()
+            elif action == "delete":
+                self.start_delete(code)
             else:
                 self.menu_open = False  # Enter runs the highlighted item, Escape closes
                 self.tap([code])
         self.pending = (code, asyncio.get_running_loop().call_later(CHORD_S, lone))
+
+    def click(self):
+        for value in (1, 0):
+            self.wheel.write(e.EV_KEY, e.BTN_LEFT, value)
+            self.wheel.syn()
+
+    def start_delete(self, code):
+        if code not in self.down:
+            self.erase()  # already released: a tap
+            return
+
+        def held():
+            self.delete_key = (code, None)
+            self.chord([e.KEY_BACKSPACE], 1)  # X repeats it until the release
+        timer = asyncio.get_running_loop().call_later(HOLD_S - CHORD_S, held)
+        self.delete_key = (code, timer)
+
+    def end_delete(self):
+        timer = self.delete_key[1]
+        self.delete_key = None
+        if timer:
+            timer.cancel()
+            self.erase()
+        else:
+            self.chord([e.KEY_BACKSPACE], 0)
+
+    def erase(self):
+        """Erase the last Handy dictation if it hasn't been yet, else one character."""
+        last = last_dictation()
+        if last and last[0] != self.erased:
+            self.erased = last[0]
+            print(f"erasing dictation {last[0]} ({len(last[1])} characters)", flush=True)
+            for _ in last[1]:
+                self.tap([e.KEY_BACKSPACE])
+        else:
+            self.tap([e.KEY_BACKSPACE])
 
     def scroll(self, code, value, where):
         if where == "window":
