@@ -19,7 +19,7 @@ Each app gets its own set of dial profiles, and the set follows whichever app is
 |---|---|
 | Mode button (reported as Backspace) | Next profile in the focused app's set, with a desktop notification |
 | Enter + Escape together | App switcher (GNOME's Super+Tab): the dial moves between apps; the mode button opens the highlighted app's windows, where the dial moves between them, and closes them again; Enter goes there, Escape (or the pair again) cancels. The picked app's profiles take over. A switcher left open 20 s cancels itself |
-| Voice key | Holds Ctrl+Space for a dictation app such as Handy |
+| Voice key | Holds Ctrl+Shift+Space, Handy's "Transcribe with Post-Processing" shortcut (set `VOICE_KEYS` to Ctrl+Space for plain dictation) |
 | Escape in **tab through** | A tap erases your last Handy dictation in one go (if it's under 5 minutes old and not erased yet), and after that deletes one character. Holding it holds Backspace |
 | Enter / Escape alone | Enter / Escape, sent after a 0.1 s wait to check whether its partner follows |
 

@@ -37,8 +37,10 @@ from evdev import UInput, ecodes as e
 AU05_VENDOR, AU05_PRODUCT = 0xFFF1, 0x00DD
 
 # What the voice key sends while held, in every profile. The AU05 itself sends Ctrl+Space
-# or Ctrl+Alt+Space, depending on its Ulanzi Studio preset.
-VOICE_KEYS = [e.KEY_LEFTCTRL, e.KEY_SPACE]
+# or Ctrl+Alt+Space, depending on its Ulanzi Studio preset. Ctrl+Shift+Space is Handy's
+# "Transcribe with Post-Processing": a local model turns "slash commit" into /commit and
+# "at" into @ in addresses, at the cost of a few seconds. Plain Ctrl+Space skips that.
+VOICE_KEYS = [e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_SPACE]
 
 CTRL, SHIFT, ALT = e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_LEFTALT
 
