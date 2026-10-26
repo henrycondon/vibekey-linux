@@ -51,14 +51,18 @@ CTRL, SHIFT, ALT = e.KEY_LEFTCTRL, e.KEY_LEFTSHIFT, e.KEY_LEFTALT
 # window's centre, and puts it back once the dial rests. "keys" gives Enter or Escape
 # another job in that profile: "click" is a left click under the pointer; "delete" erases
 # the last Handy dictation on a tap (a single Backspace once that's done) and holds
-# Backspace while held.
+# Backspace while held. "enter" and "leave" are keys sent when the mode button steps into
+# or out of the profile.
 PROFILES = {
     # Terminator: Ctrl+Tab / Ctrl+Shift+Tab step panes.
     "panes": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
     # Terminator: bind line_up / line_down to these in Preferences > Keybindings, so the
     # focused pane scrolls rather than the one under the pointer.
+    # Entering it, Ctrl+Shift+Z (Terminator's scaled_zoom) fills the window with the focused
+    # pane and enlarges its text, for reading from across the room; leaving undoes that.
     "terminal-scroll": {"name": "scroll", "up": [ALT, SHIFT, e.KEY_UP],
-                        "down": [ALT, SHIFT, e.KEY_DOWN], "times": 3},
+                        "down": [ALT, SHIFT, e.KEY_DOWN], "times": 3,
+                        "enter": [CTRL, SHIFT, e.KEY_Z], "leave": [CTRL, SHIFT, e.KEY_Z]},
     # Claude Code's multiple-choice questions.
     "choose": {"up": [e.KEY_UP], "down": [e.KEY_DOWN]},
     # Obsidian (and most apps with tabs): Ctrl+Tab / Ctrl+Shift+Tab.
@@ -221,6 +225,7 @@ class Remapper:
         self.down = set()          # chord keys physically down
         self.delete_key = None     # the Escape doing a "delete": (key, hold timer or None once held)
         self.erased = None         # id of the Handy dictation already erased
+        self.entered = None        # (app, profile) whose "leave" keys are still owed
         self.kbd = UInput({e.EV_KEY: list(range(1, 249))}, name="vibekey keyboard")
         # libinput only treats a device as a pointer if it can move and click.
         self.wheel = UInput({
@@ -254,13 +259,25 @@ class Remapper:
             return
         self.app, self.profiles, self.index, self.refocus = app, profiles, 0, False
         self.menu_open = False
+        if self.entered and self.entered[0] == app:
+            # Back in an app left mid-profile (a zoomed pane, say): undo it, as the first
+            # profile is active again.
+            self.tap(PROFILES[self.entered[1]]["leave"])
+            self.entered = None
         print(f"focus: {wm_class} -> {self.label()}", flush=True)
         if app:
             notify(self.label())
 
     def next_profile(self):
+        if "leave" in PROFILES[self.profile]:
+            self.tap(PROFILES[self.profile]["leave"])
+            self.entered = None
         self.index = (self.index + 1) % len(self.profiles)
         self.menu_open = False
+        if "enter" in PROFILES[self.profile]:
+            self.tap(PROFILES[self.profile]["enter"])
+            if "leave" in PROFILES[self.profile]:
+                self.entered = (self.app, self.profile)
         print(f"profile: {self.label()}", flush=True)
         notify(self.label())
 

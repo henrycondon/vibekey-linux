@@ -10,7 +10,7 @@ Each app gets its own set of dial profiles, and the set follows whichever app is
 
 | App | Dial profiles (the mode button steps through them) |
 |---|---|
-| Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick) → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
+| Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick), which on entry fills the window with that pane and enlarges its text (Terminator's scaled zoom, Ctrl+Shift+Z) and undoes that on exit → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
 | Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window → **notes**: a turn forward makes one new note (Ctrl+N); a turn back opens the command palette (Ctrl+P), and further turning moves through it until Enter or Escape → **tab through** (as in Firefox; Tab indents inside a note) |
 | Firefox | **tabs** (Ctrl+PageUp / Ctrl+PageDown) → **scroll** the focused window → **tab through** (Tab / Shift+Tab, to reach links, buttons and text boxes; Enter left-clicks under the pointer and Escape deletes, see below) |
 | Anything else | **scroll** the focused window |
