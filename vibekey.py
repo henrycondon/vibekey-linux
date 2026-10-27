@@ -55,20 +55,33 @@ ZOOM_STEPS = 6
 # window's centre, and puts it back once the dial rests. "keys" gives Enter or Escape
 # another job in that profile: "click" is a left click under the pointer; "delete" erases
 # the last Handy dictation on a tap (a single Backspace once that's done) and holds
-# Backspace while held. "enter" and "leave" are lists of key chords sent when the mode
-# button steps into or out of the profile.
+# Backspace while held; "backspace" is one Backspace on a tap and held Backspace while held;
+# {"tap": keys, "hold": keys} sends one or the other, the hold ones as soon as HOLD_S passes. "enter" is a list of key chords sent when the mode button steps
+# into the profile, and "leave" undoes them once the mode button steps past the profile
+# and the ones named in "through".
 PROFILES = {
     # Terminator: Ctrl+Tab / Ctrl+Shift+Tab step panes.
     "panes": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
     # Terminator: bind line_up / line_down to these in Preferences > Keybindings, so the
     # focused pane scrolls rather than the one under the pointer.
     # Entering it fills the window with the focused pane (Ctrl+Shift+X, toggle_zoom) and
-    # makes its text ZOOM_STEPS points bigger (Ctrl+plus), for reading from across the room;
-    # leaving restores the text size (Ctrl+0) and the layout.
+    # makes its text ZOOM_STEPS points above normal (Ctrl+0, then Ctrl+plus), for reading
+    # from across the room;
+    # edit and choose keep that, and stepping on to panes restores the text size (Ctrl+0)
+    # and the layout.
     "terminal-scroll": {"name": "scroll", "up": [ALT, SHIFT, e.KEY_UP],
                         "down": [ALT, SHIFT, e.KEY_DOWN], "times": 3,
-                        "enter": [[CTRL, SHIFT, e.KEY_X]] + [[CTRL, SHIFT, e.KEY_EQUAL]] * ZOOM_STEPS,
-                        "leave": [[CTRL, e.KEY_0], [CTRL, SHIFT, e.KEY_X]]},
+                        "enter": [[CTRL, SHIFT, e.KEY_X], [CTRL, e.KEY_0]]
+                                 + [[CTRL, SHIFT, e.KEY_EQUAL]] * ZOOM_STEPS,
+                        "leave": [[CTRL, e.KEY_0], [CTRL, SHIFT, e.KEY_X]],
+                        "through": ["edit", "choose"],
+                        # Tab, held, accepts Claude Code's suggestion or completes a path.
+                        "keys": {e.KEY_ENTER: {"tap": [e.KEY_ENTER], "hold": [e.KEY_TAB]}}},
+    # Editing a prompt: the dial moves the cursor, Escape is Backspace (hold to keep
+    # deleting), Enter is a space on a tap and Enter (send) when held.
+    "edit": {"up": [e.KEY_LEFT], "down": [e.KEY_RIGHT],
+             "keys": {e.KEY_ENTER: {"tap": [e.KEY_SPACE], "hold": [e.KEY_ENTER]},
+                      e.KEY_ESC: "backspace"}},
     # Claude Code's multiple-choice questions.
     "choose": {"up": [e.KEY_UP], "down": [e.KEY_DOWN]},
     # Obsidian (and most apps with tabs): Ctrl+Tab / Ctrl+Shift+Tab.
@@ -90,7 +103,7 @@ PROFILES = {
 # against the window's WM_CLASS (lowercase substring); run `xprop WM_CLASS` and click a
 # window to see an app's. Apps not listed get DEFAULT_PROFILES.
 APP_PROFILES = {
-    "terminator": ["panes", "terminal-scroll", "choose"],
+    "terminator": ["panes", "terminal-scroll", "edit", "choose"],
     "obsidian": ["tabs", "scroll", "notes", "fields"],
     "firefox": ["browser-tabs", "scroll", "fields"],
 }
@@ -117,11 +130,15 @@ APP_SWITCH_TIMEOUT_S = 20
 MODE_KEY = e.KEY_BACKSPACE
 
 
-# "delete": an Escape held this long holds Backspace instead of erasing the dictation.
+# A key with a tap/hold action (such as "delete") counts as held after this long.
 HOLD_S = 0.4
 # Handy's dictation history. Only a dictation this recent is erased in one go.
 HANDY_DIR = Path.home() / ".local/share/com.pais.handy"
 HANDY_ERASE_WITHIN_S = 300
+
+# Keys still owed to undo an "enter" (a zoomed pane, say), kept across restarts. Terminator's
+# zoom is a toggle, so forgetting it in a restart would leave every later toggle backwards.
+STATE_FILE = Path.home() / ".cache/vibekey/owed.json"
 
 # ------------------------------------------------------------------------------------
 
@@ -230,15 +247,33 @@ class Remapper:
         self.last_tick = 0.0       # for "once" profiles: when the dial last moved
         self.menu_open = False     # a "once" profile opened a menu the dial now moves through
         self.down = set()          # chord keys physically down
-        self.delete_key = None     # the Escape doing a "delete": (key, hold timer or None once held)
+        self.press_key = None      # a key with a tap/hold action: (key, action, hold timer or None once held)
         self.erased = None         # id of the Handy dictation already erased
-        self.entered = None        # (app, profile) whose "leave" keys are still owed
+        try:
+            owed = json.loads(STATE_FILE.read_text())
+        except (OSError, ValueError):
+            owed = None
+        # (app, profile) whose "leave" keys are still owed
+        self._entered = tuple(owed) if owed and "leave" in PROFILES.get(owed[1], {}) else None
         self.kbd = UInput({e.EV_KEY: list(range(1, 249))}, name="vibekey keyboard")
         # libinput only treats a device as a pointer if it can move and click.
         self.wheel = UInput({
             e.EV_KEY: [e.BTN_LEFT, e.BTN_RIGHT, e.BTN_MIDDLE],
             e.EV_REL: [e.REL_X, e.REL_Y, e.REL_WHEEL, e.REL_WHEEL_HI_RES],
         }, name="vibekey wheel")
+
+    @property
+    def entered(self):
+        return self._entered
+
+    @entered.setter
+    def entered(self, value):
+        self._entered = value
+        try:
+            STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            STATE_FILE.write_text(json.dumps(value))
+        except OSError as err:
+            print(f"state file: {err}", flush=True)
 
     @property
     def profile(self):
@@ -280,11 +315,12 @@ class Remapper:
             notify(self.label())
 
     def next_profile(self):
-        if "leave" in PROFILES[self.profile]:
-            self.taps(PROFILES[self.profile]["leave"])
-            self.entered = None
         self.index = (self.index + 1) % len(self.profiles)
         self.menu_open = False
+        if (self.entered and self.entered[0] == self.app
+                and self.profile not in PROFILES[self.entered[1]].get("through", [])):
+            self.taps(PROFILES[self.entered[1]]["leave"])
+            self.entered = None
         if "enter" in PROFILES[self.profile]:
             self.taps(PROFILES[self.profile]["enter"])
             if "leave" in PROFILES[self.profile]:
@@ -366,8 +402,8 @@ class Remapper:
         if value == 0:
             self.down.discard(code)
             self.chorded.discard(code)
-            if self.delete_key and self.delete_key[0] == code:
-                self.end_delete()
+            if self.press_key and self.press_key[0] == code:
+                self.end_press()
             return
         if value == 1:
             self.down.add(code)
@@ -387,8 +423,8 @@ class Remapper:
                 self.end_switch(go=code == e.KEY_ENTER)
             elif action == "click":
                 self.click()
-            elif action == "delete":
-                self.start_delete(code)
+            elif action:
+                self.start_press(code, action)
             else:
                 self.menu_open = False  # Enter runs the highlighted item, Escape closes
                 self.tap([code])
@@ -399,25 +435,37 @@ class Remapper:
             self.wheel.write(e.EV_KEY, e.BTN_LEFT, value)
             self.wheel.syn()
 
-    def start_delete(self, code):
+    def start_press(self, code, action):
+        """A key with a tap and a hold meaning: "delete", "backspace", or {"tap", "hold"}."""
         if code not in self.down:
-            self.erase()  # already released: a tap
+            self.tapped(action)  # already released: a tap
             return
 
         def held():
-            self.delete_key = (code, None)
-            self.chord([e.KEY_BACKSPACE], 1)  # X repeats it until the release
+            self.press_key = (code, action, None)
+            if isinstance(action, dict):
+                self.tap(action["hold"])
+            else:
+                self.chord([e.KEY_BACKSPACE], 1)  # X repeats it until the release
         timer = asyncio.get_running_loop().call_later(HOLD_S - CHORD_S, held)
-        self.delete_key = (code, timer)
+        self.press_key = (code, action, timer)
 
-    def end_delete(self):
-        timer = self.delete_key[1]
-        self.delete_key = None
+    def end_press(self):
+        code, action, timer = self.press_key
+        self.press_key = None
         if timer:
             timer.cancel()
-            self.erase()
-        else:
+            self.tapped(action)
+        elif not isinstance(action, dict):
             self.chord([e.KEY_BACKSPACE], 0)
+
+    def tapped(self, action):
+        if action == "delete":
+            self.erase()
+        elif action == "backspace":
+            self.tap([e.KEY_BACKSPACE])
+        else:
+            self.tap(action["tap"])
 
     def erase(self):
         """Erase the last Handy dictation if it hasn't been yet, else one character."""
