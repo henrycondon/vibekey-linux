@@ -32,7 +32,7 @@ The first profile in each list is active when the app gets focus. The mode butto
 
 | App | Profiles in order |
 |---|---|
-| Terminal (Terminator on Linux) | **panes**: previous/next pane · **scroll**: scroll the focused pane 3 lines per tick · **choose**: Up / Down, for Claude Code's multiple-choice questions |
+| Terminal (Terminator on Linux) | **panes**: previous/next pane · **scroll**: scroll the focused pane 3 lines per tick; confirm taps Enter, holds Tab · **edit**: Left / Right move the cursor; confirm taps Space, holds Enter (send); cancel is Backspace, held to repeat · **choose**: Up / Down, for Claude Code's multiple-choice questions |
 | Obsidian | **tabs**: Ctrl+Shift+Tab / Ctrl+Tab · **scroll**: scroll the focused window · **notes**: see below · **tab through**: Shift+Tab / Tab |
 | Firefox | **tabs**: previous/next tab in tab-strip order (Ctrl+PageUp / Ctrl+PageDown) · **scroll**: scroll the focused window · **tab through**: Shift+Tab / Tab |
 | Any other app | **scroll**: scroll the focused window |
@@ -46,6 +46,11 @@ Special behaviours:
   - Cancel is a **delete** key:
     - A tap erases the user's last Handy dictation in one go: it sends as many Backspaces as the dictation has characters, read from Handy's history database. This only happens if the dictation is under 5 minutes old and hasn't been erased already. Otherwise a tap deletes one character.
     - Holding cancel for 0.4 s or longer holds Backspace down, so it repeats.
+- **Terminal zoom.** Entering **scroll** makes the focused pane fill the window and sets its text 6 pt above normal. On Linux that's Ctrl+Shift+X, then Ctrl+0, then Ctrl+plus six times. The zoom stays through **edit** and **choose**. Stepping on to **panes** resets the text (Ctrl+0) and the layout (Ctrl+Shift+X again).
+  - Terminator's zoom is a toggle, so vibekey remembers a zoom it still has to undo in `~/.cache/vibekey/owed.json`, which survives restarts.
+  - It undoes the zoom only while the terminal is focused. If you switch apps while zoomed, the zoom is undone when you come back, and the profile restarts at panes.
+  - On the Mac, prefer an idempotent zoom if the terminal has one, such as iTerm2's "Maximize Active Pane" plus a font-size action. VERIFY.
+- **Tap versus hold.** A key counts as held after 0.4 s. A hold action fires once at that moment, except the held Backspaces, which repeat until release.
 - **Lone confirm and cancel.** Everywhere else they send Enter and Escape. Each one is held back 0.1 s first, to see whether its partner follows (the chord below).
 
 ### The app switcher (confirm + cancel together)
