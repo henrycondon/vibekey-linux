@@ -10,8 +10,8 @@ Each app gets its own set of dial profiles, and the set follows whichever app is
 
 | App | Dial profiles (the mode button steps through them) |
 |---|---|
-| Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick; confirm is Enter on a tap and Tab when held), which on entry fills the window with that pane (Ctrl+Shift+X) and makes its text `ZOOM_STEPS` points bigger (Ctrl+plus), and keeps both through **edit** and **choose**, undoing them when the mode button gets back to **panes** → **edit** (Left/Right move the cursor; confirm is Space on a tap and Enter when held; cancel is Backspace, held to keep deleting) → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
-| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused window → **notes**: a turn forward makes one new note (Ctrl+N); a turn back opens the command palette (Ctrl+P), and further turning moves through it until Enter or Escape → **tab through** (as in Firefox; Tab indents inside a note) |
+| Terminator | **panes** (Ctrl+Tab / Ctrl+Shift+Tab) → **scroll** the focused pane (Alt+Shift+Up/Down, 3 lines per tick; confirm is Enter on a tap and Tab when held), which on entry fills the window with that pane (Ctrl+Shift+X, pressed only after `terminator_panes.py` confirms the window isn't zoomed already, since the key is a toggle) and makes its text `ZOOM_STEPS` points bigger (Ctrl+plus), and keeps both through **edit** and **choose**, undoing them when the mode button gets back to **panes** → **edit** (Left/Right move the cursor; confirm is Space on a tap and Enter when held; cancel is Backspace, held to keep deleting) → **choose** (Up/Down, for Claude Code's multiple-choice questions) |
+| Obsidian | **tabs** (Ctrl+Tab / Ctrl+Shift+Tab) → **panes**: the split panes, left and right (Alt+Shift+Left / Right) → **scroll** the focused window → **notes**: a turn forward makes one new note (Ctrl+N); a turn back opens the command palette (Ctrl+P), and further turning moves through it until Enter or Escape → **tab through** (as in Firefox; Tab indents inside a note) |
 | Firefox | **tabs** (Ctrl+PageUp / Ctrl+PageDown) → **scroll** the focused window → **tab through** (Tab / Shift+Tab, to reach links, buttons and text boxes; Enter left-clicks under the pointer and Escape deletes, see below) |
 | Anything else | **scroll** the focused window |
 
@@ -54,7 +54,13 @@ systemctl --user daemon-reload
 systemctl --user enable --now vibekey
 ```
 
+### Obsidian setup
+
+Obsidian's "Focus on tab group to the left" and "...to the right" commands have no default hotkey. In each vault, open **Settings → Hotkeys** and bind them to Alt+Shift+Left and Alt+Shift+Right.
+
 ### Terminator setup
+
+The zoom check uses the accessibility bus through the system Python's `pyatspi` (`sudo apt install python3-pyatspi`, already on Ubuntu desktops). Without it, the zoom falls back to a plain toggle, which can get out of step.
 
 Terminator has keyboard scroll actions but leaves them unbound. In **Preferences → Keybindings**, set `line_up` to Alt+Shift+Up and `line_down` to Alt+Shift+Down. With scroll mode on, you can turn the dial one notch to enter each one. Raising **Profiles → Scrolling → Scrollback** above the default 500 lines also helps.
 

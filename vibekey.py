@@ -52,28 +52,31 @@ ZOOM_STEPS = 6
 # Dial profiles: what one tick up and one tick down send, shown by "name" (default: the
 # key). "times" repeats each tick. A "wheel" profile scrolls instead: "pointer" scrolls
 # whatever is under the pointer; "window" first moves the pointer onto the focused
-# window's centre, and puts it back once the dial rests. "keys" gives Enter or Escape
-# another job in that profile: "click" is a left click under the pointer; "delete" erases
-# the last Handy dictation on a tap (a single Backspace once that's done) and holds
-# Backspace while held; "backspace" is one Backspace on a tap and held Backspace while held;
-# {"tap": keys, "hold": keys} sends one or the other, the hold ones as soon as HOLD_S passes. "enter" is a list of key chords sent when the mode button steps
-# into the profile, and "leave" undoes them once the mode button steps past the profile
-# and the ones named in "through".
+# window's centre, and puts it back once the dial rests.
+#
+# "keys" gives Enter or Escape another job in that profile: "click" is a left click under
+# the pointer; "delete" erases the last Handy dictation on a tap (a single Backspace once
+# that's done) and holds Backspace while held; "backspace" is one Backspace on a tap and
+# held Backspace while held; {"tap": keys, "hold": keys} sends one or the other, the hold
+# ones as soon as HOLD_S passes.
+#
+# "enter" is a list of key chords sent when the mode button steps into the profile, and
+# "leave" undoes them once the mode button steps past the profile and the ones named in
+# "through". "zoom" also zooms Terminator's focused pane over that span.
 PROFILES = {
     # Terminator: Ctrl+Tab / Ctrl+Shift+Tab step panes.
     "panes": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
     # Terminator: bind line_up / line_down to these in Preferences > Keybindings, so the
     # focused pane scrolls rather than the one under the pointer.
-    # Entering it fills the window with the focused pane (Ctrl+Shift+X, toggle_zoom) and
-    # makes its text ZOOM_STEPS points above normal (Ctrl+0, then Ctrl+plus), for reading
-    # from across the room;
-    # edit and choose keep that, and stepping on to panes restores the text size (Ctrl+0)
-    # and the layout.
+    # Entering it fills the window with the focused pane ("zoom") and makes its text
+    # ZOOM_STEPS points above normal (Ctrl+0, then Ctrl+plus), for reading from across the
+    # room; edit and choose keep that, and stepping on to panes restores the text size
+    # (Ctrl+0) and the layout.
     "terminal-scroll": {"name": "scroll", "up": [ALT, SHIFT, e.KEY_UP],
                         "down": [ALT, SHIFT, e.KEY_DOWN], "times": 3,
-                        "enter": [[CTRL, SHIFT, e.KEY_X], [CTRL, e.KEY_0]]
-                                 + [[CTRL, SHIFT, e.KEY_EQUAL]] * ZOOM_STEPS,
-                        "leave": [[CTRL, e.KEY_0], [CTRL, SHIFT, e.KEY_X]],
+                        "zoom": True,
+                        "enter": [[CTRL, e.KEY_0]] + [[CTRL, SHIFT, e.KEY_EQUAL]] * ZOOM_STEPS,
+                        "leave": [[CTRL, e.KEY_0]],
                         "through": ["edit", "choose"],
                         # Tab, held, accepts Claude Code's suggestion or completes a path.
                         "keys": {e.KEY_ENTER: {"tap": [e.KEY_ENTER], "hold": [e.KEY_TAB]}}},
@@ -86,6 +89,9 @@ PROFILES = {
     "choose": {"up": [e.KEY_UP], "down": [e.KEY_DOWN]},
     # Obsidian (and most apps with tabs): Ctrl+Tab / Ctrl+Shift+Tab.
     "tabs": {"up": [CTRL, SHIFT, e.KEY_TAB], "down": [CTRL, e.KEY_TAB]},
+    # Obsidian's split panes (tab groups): "Focus on tab group to the left / right", which
+    # have no default hotkey; bind them to Alt+Shift+Left / Right in Settings > Hotkeys.
+    "obsidian-panes": {"name": "panes", "up": [ALT, SHIFT, e.KEY_LEFT], "down": [ALT, SHIFT, e.KEY_RIGHT]},
     "scroll": {"wheel": "window"},
     # Obsidian: one turn forward makes one new note; one turn back opens the command
     # palette, and further turning moves through it until Enter or Escape.
@@ -104,7 +110,7 @@ PROFILES = {
 # window to see an app's. Apps not listed get DEFAULT_PROFILES.
 APP_PROFILES = {
     "terminator": ["panes", "terminal-scroll", "edit", "choose"],
-    "obsidian": ["tabs", "scroll", "notes", "fields"],
+    "obsidian": ["tabs", "obsidian-panes", "scroll", "notes", "fields"],
     "firefox": ["browser-tabs", "scroll", "fields"],
 }
 DEFAULT_PROFILES = ["scroll"]
@@ -135,6 +141,14 @@ HOLD_S = 0.4
 # Handy's dictation history. Only a dictation this recent is erased in one go.
 HANDY_DIR = Path.home() / ".local/share/com.pais.handy"
 HANDY_ERASE_WITHIN_S = 300
+
+# Terminator's toggle_zoom. It's a toggle, so before pressing it vibekey asks
+# terminator_panes.py (with the system Python, for pyatspi) how many panes the window shows.
+TOGGLE_ZOOM = [CTRL, SHIFT, e.KEY_X]
+PANES_HELPER = Path(__file__).with_name("terminator_panes.py")
+# After focus comes back to an app, wait this long before sending it keys, so they don't
+# land in the window being left.
+FOCUS_SETTLE_S = 0.3
 
 # Keys still owed to undo an "enter" (a zoomed pane, say), kept across restarts. Terminator's
 # zoom is a toggle, so forgetting it in a restart would leave every later toggle backwards.
@@ -167,6 +181,16 @@ def last_dictation():
     if settings.get("append_trailing_space"):
         text += " "
     return row[0], text
+
+
+def terminator_panes():
+    """How many panes the focused Terminator window shows (1 when zoomed), or None."""
+    try:
+        out = subprocess.run(["/usr/bin/python3", str(PANES_HELPER)], capture_output=True,
+                             text=True, timeout=2).stdout
+        return int(out)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None
 
 
 def notify(text):
@@ -308,8 +332,9 @@ class Remapper:
         if self.entered and self.entered[0] == app:
             # Back in an app left mid-profile (a zoomed pane, say): undo it, as the first
             # profile is active again.
-            self.taps(PROFILES[self.entered[1]]["leave"])
-            self.entered = None
+            owed, self.entered = self.entered, None
+            asyncio.get_running_loop().call_later(
+                FOCUS_SETTLE_S, lambda: self.app == owed[0] and self.leave(owed[1]))
         print(f"focus: {wm_class} -> {self.label()}", flush=True)
         if app:
             notify(self.label())
@@ -319,14 +344,27 @@ class Remapper:
         self.menu_open = False
         if (self.entered and self.entered[0] == self.app
                 and self.profile not in PROFILES[self.entered[1]].get("through", [])):
-            self.taps(PROFILES[self.entered[1]]["leave"])
+            self.leave(self.entered[1])
             self.entered = None
         if "enter" in PROFILES[self.profile]:
+            if PROFILES[self.profile].get("zoom"):
+                self.set_zoom(True)
             self.taps(PROFILES[self.profile]["enter"])
             if "leave" in PROFILES[self.profile]:
                 self.entered = (self.app, self.profile)
         print(f"profile: {self.label()}", flush=True)
         notify(self.label())
+
+    def leave(self, name):
+        self.taps(PROFILES[name]["leave"])
+        if PROFILES[name].get("zoom"):
+            self.set_zoom(False)
+
+    def set_zoom(self, on):
+        shown = terminator_panes()
+        print(f"zoom {'on' if on else 'off'}: window shows {shown} panes", flush=True)
+        if shown is None or (shown > 1) == on:
+            self.tap(TOGGLE_ZOOM)
 
     # --- the app switcher
 
